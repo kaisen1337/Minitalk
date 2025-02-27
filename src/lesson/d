@@ -1,0 +1,270 @@
+Detailed Documentation on sigaction  
+and Signal Handling – Triple Detailed Version
+
+------------------------------------------------
+Introduction to Signals:
+Signals are messages sent by the operating system.
+They alert processes about events.
+For example, pressing Ctrl+C sends SIGINT.
+Signals let processes communicate with each other.
+They can stop, pause, or notify programs.
+Understanding signals is key in Unix systems.
+
+------------------------------------------------
+Types of Signals:
+There are two main signal types:
+1. Standard Signals (e.g., SIGINT, SIGTERM).
+2. Real-Time Signals (SIGRTMIN to SIGRTMAX).
+Standard signals have fixed behaviors.
+Real-time signals can be queued.
+They may carry extra data with them.
+Each signal has a unique number.
+This number identifies the signal.
+
+------------------------------------------------
+Signal Actions:
+When a signal is received, a process can:
+- Use the default action.
+- Ignore the signal.
+- Catch the signal with a handler.
+Default action may exit the process.
+Ignoring stops any effect from the signal.
+Catching means running a custom function.
+This custom function is a signal handler.
+Choosing the right action is important.
+
+------------------------------------------------
+What is sigaction?
+sigaction is a system call.
+It sets how a process handles a signal.
+It is more flexible than the signal() function.
+It allows extra control and detail.
+You can use it for simple or advanced handling.
+It prevents automatic reset of the handler.
+This makes your program more stable.
+
+------------------------------------------------
+Syntax of sigaction:
+int sigaction(int signum,
+              const struct sigaction *act,
+              struct sigaction *oldact);
+- signum: The signal number to handle.
+- act: Pointer to new action settings.
+- oldact: Saves previous action settings.
+Return 0 on success; -1 on error.
+It sets up signal handling as you wish.
+
+------------------------------------------------
+The struct sigaction:
+This structure defines signal behavior.
+It contains several fields for customization.
+Each field has a special role.
+It is essential for robust signal handling.
+
+Field: sa_handler
+- A pointer to a simple handler function.
+- This function takes one integer argument.
+- It only receives the signal number.
+- Use it for basic signal handling.
+
+Field: sa_sigaction
+- A pointer to an advanced handler.
+- It accepts three parameters.
+- Parameters: signal number, siginfo_t pointer, context pointer.
+- Use it when extra information is needed.
+- Requires the SA_SIGINFO flag to work.
+
+Field: sa_mask
+- A set of signals to block during handling.
+- Type is sigset_t.
+- It prevents interference during handler execution.
+- Signals in this mask are temporarily ignored.
+- This helps maintain safe execution.
+
+Field: sa_flags
+- Flags that modify handler behavior.
+- Example: SA_SIGINFO makes sa_sigaction active.
+- SA_RESTART restarts some system calls.
+- SA_NODEFER prevents blocking the current signal.
+- Set these flags to tune behavior.
+
+Field: sa_restorer
+- This field is obsolete.
+- Do not use sa_restorer in modern code.
+- It exists only for legacy reasons.
+
+------------------------------------------------
+The sigset_t Type:
+sigset_t is a set of signals.
+It represents blocked or allowed signals.
+It is used with signal masks.
+You control it with helper functions.
+It is crucial for managing signal delivery.
+
+------------------------------------------------
+Manipulating Signal Sets:
+Use sigemptyset to clear a set.
+It makes the set empty.
+Example: sigemptyset(&set);
+Use sigfillset to include all signals.
+It fills the set with every signal.
+Example: sigfillset(&set);
+Use sigaddset to add one signal.
+Example: sigaddset(&set, SIGINT);
+It adds SIGINT to the set.
+Use sigdelset to remove a signal.
+Example: sigdelset(&set, SIGINT);
+It removes SIGINT from the set.
+Use sigismember to check the set.
+Example: sigismember(&set, SIGINT);
+Returns 1 if SIGINT is present.
+This lets you verify the mask.
+
+------------------------------------------------
+The siginfo_t Structure:
+siginfo_t holds extra signal data.
+It gives detailed information about a signal.
+It is used with sa_sigaction.
+It provides context for the signal.
+Its fields include many details:
+
+Field: si_signo
+- The signal number that was received.
+- It identifies the specific signal.
+
+Field: si_errno
+- Contains an error number, if applicable.
+- Helps to diagnose issues.
+
+Field: si_code
+- Provides a code for signal cause.
+- Explains why the signal was sent.
+
+Field: si_pid
+- The process ID of the sender.
+- Tells you who sent the signal.
+
+Field: si_uid
+- The user ID of the sender.
+- It verifies the sender's identity.
+
+Field: si_addr
+- The memory address causing the fault.
+- Used with signals like SIGSEGV.
+
+Field: si_status
+- Contains exit status for SIGCHLD.
+- Shows termination details.
+
+Field: si_value
+- A union for extra signal value.
+- Used with real-time signals.
+- Carries custom data sent with the signal.
+
+------------------------------------------------
+How Does sigaction Work?
+1. Define a struct sigaction variable.
+2. Set your handler function in sa_handler or sa_sigaction.
+3. Initialize the signal mask using sigemptyset.
+4. Optionally add signals to block with sigaddset.
+5. Set desired flags in sa_flags.
+6. Call sigaction with the signal number and your structure.
+7. Optionally, store the old action in oldact.
+8. Now, when the signal arrives, your handler is run.
+
+------------------------------------------------
+Example Code Walkthrough:
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+// Advanced handler with extra info.
+void my_handler(int signum, siginfo_t *info, void *context) {
+    (void)context;  // Unused parameter.
+    printf("Received signal %d\n", signum);
+    printf("Sender PID: %d\n", info->si_pid);
+}
+
+int main(void) {
+    struct sigaction sa;
+    sigset_t mask;
+
+    // Start with an empty signal set.
+    sigemptyset(&mask);
+    // Add SIGINT to block it during handling.
+    sigaddset(&mask, SIGINT);
+
+    // Set advanced handler in sa_sigaction.
+    sa.sa_sigaction = my_handler;
+    // Use the defined mask.
+    sa.sa_mask = mask;
+    // Use SA_SIGINFO flag for extra info.
+    sa.sa_flags = SA_SIGINFO;
+
+    // Set the action for signal SIGUSR1.
+    if (sigaction(SIGUSR1, &sa, NULL) == -1) {
+        perror("sigaction error");
+        exit(EXIT_FAILURE);
+    }
+
+    printf("Process PID: %d\n", getpid());
+    // Wait indefinitely for signals.
+    while (1) {
+        pause();
+    }
+    return 0;
+}
+
+------------------------------------------------
+Detailed Explanation:
+- The code sets an advanced handler.
+- my_handler prints the signal number and sender PID.
+- The signal mask blocks SIGINT during handling.
+- SA_SIGINFO flag is needed for siginfo_t.
+- The program waits for SIGUSR1.
+- When SIGUSR1 is received, my_handler runs.
+- It shows how to safely manage signals.
+
+------------------------------------------------
+Additional Points:
+sigaction is robust for signal handling.
+It is preferred over the older signal() function.
+It does not automatically reset the handler.
+It can restart system calls (SA_RESTART flag).
+Blocking signals during handler execution is safe.
+It prevents re-entrant issues in the handler.
+Learning sigaction is key in system programming.
+It gives full control over signal behavior.
+
+------------------------------------------------
+Common Pitfalls:
+Do not forget to initialize your signal mask.
+Always check return values for errors.
+Use SA_SIGINFO if you need extra details.
+Avoid using obsolete fields like sa_restorer.
+Be cautious with global variables in handlers.
+Signals can interrupt system calls unexpectedly.
+Test your handlers thoroughly.
+
+------------------------------------------------
+Summary:
+- Signals are OS messages for events.
+- sigaction sets custom actions for signals.
+- The struct sigaction holds handler and mask.
+- sa_handler and sa_sigaction set your function.
+- sa_mask blocks signals during handler execution.
+- sigset_t holds and manages signal sets.
+- sigemptyset and sigaddset build your mask.
+- siginfo_t provides extra signal information.
+- Use simple code to test and understand signals.
+- Practice is key for mastering signal handling.
+
+------------------------------------------------
+Final Tips:
+Read each section slowly and carefully.
+Write small programs to test each concept.
+Ask questions if any part is unclear.
+Review examples and run them in your system.
+Learning signal handling improves system programming skills.
+Happy coding and good luck learning!
